@@ -4,9 +4,9 @@ source("Group.Lasso.Paper.Functions.R")
 set.seed(2)
 
 
-p <- 10                                     # number of variables per subject
+p <- 20                                     # number of variables per subject
 print(c("p",p))
-t.set <- c(30)                             # number of observed time points per subject
+t.set <- c(50)                             # number of observed time points per subject
 print(c("t.set:",t.set))
 K.set <- c(20)                              # number of subjects per group
 print(c("K.set:",K.set))
@@ -18,7 +18,7 @@ signs <- c(1,-1)                            # Whether effects will be allowed to
 print(c("Signs:",signs))
 SNR <- 2                                    # Signal-to-Noise ratio
 print(c("SNR:",SNR))
-spectral <- 0.6                             # Maximum eigenvalue allowed in generated VAR transition matrices (either 0.4 or 0.6)
+spectral <- c(0.4,0.6)[1]                   # Maximum eigenvalue allowed in generated VAR transition matrices (either 0.4 or 0.6)
 print(c("spectral:",spectral))
 pos.diag <- T                               # whether all diagonal elements of VAR transition matrices should be positive
 print(c("pos.diag=",pos.diag))
@@ -456,7 +456,12 @@ for(K in K.set){
       #print(time.taken)
     
     ##################################################
-    ### Printing all the metrics in a format for latex table
+    ### Printing all the metrics in a format for latex table:
+    ### FP, FN, Matthews for full estimates
+    ### FP, FN, Matthews for common component estimates
+    ### FP, FN, Matthews for individual component estimates
+    ### Average number of iterations till two-stage algorithm convergence
+    ### Number of times algorithm didn't converge
     ##################################################
       
     cat("\n")

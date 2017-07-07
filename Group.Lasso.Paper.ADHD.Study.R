@@ -46,7 +46,7 @@ region_names <- c("Left Auditory Cortex",
 
 initial_path <- getwd()
 set.seed(2)
-new_path <- paste(initial_path,"/fMRI_data_stuff/ADHD_TwoGroups",sep="")
+new_path <- paste(initial_path,"/ADHD200",sep="")
 setwd(new_path)
 
 temp_ADHD = list.files(path=getwd(),pattern=('ADHD=1.*MSDL.*.*detrend=True_standardize=True_TimeSeries.csv'))
@@ -76,7 +76,7 @@ print(c("Total1:",Total1))                                                # tota
 print(c("Total2:",Total2))                                                # total of control patients with >t time points observed
 
 ### Which patient group will be estimated: 1 (ADHD) or 2 (Control)
-GN <- 2
+GN <- 1
 print(c("GN:",GN))
 
 #p <- 5
@@ -86,15 +86,15 @@ Thresh2 <- 0.02                                                         # thresh
 print(c("Thresh2:",Thresh2))
 K <- min(length(select_ind_1),length(select_ind_2))                     # each group has at least K patients
 print(c("K:",K))
-R <- 30                                                                  # number of bootstrapped samples 
+R <- 50                                                                  # number of bootstrapped samples 
 print(c("R:",R))                                                        # (if R == 0 then just make SINGLE RUN for all T time points, no bootstrapping)
 
 bl.len.set <- c(0.3)                                                    # length of generated block bootstraps (as proportion of number of time points)
 print(c("bl.len.set",bl.len.set))
 offset <- 0                                                             # whether to skip some initial time points of fMRI measurements
 print(c("offset:", offset))
-d <- 1                                                                  # VAR(d), here the case of d=1 is prioritized
-print(c("order:",d))  
+D <- 1                                                                  # VAR(D), data fits well for VAR(1), so this code works solely with VAR(1)
+print(c("order:",D))  
 
 #####
 ## CRITERIONS AND OTHER PARAMETERS
@@ -221,8 +221,15 @@ for (bl.len in bl.len.set){
     
     if (R>0){
       DATA.boot <- matrix(0,dim(DATA)[1],dim(DATA)[2])
+      
+      ### Calculating maximum likelihood estimates of sigma^2 for each subject
+      
       for (j in 1:K)  DATA.boot[(j-1)*p + 1:p,] <- Data.boot[[j]][[i]]
-      Mat.obj.FULL <- mat.setup(DATA.boot,train,K,p,d=1)
+      
+      sigma2 <- rep(0,K)
+      for (k in 1:K) sigma2[k] <- OLS.tseries(DATA.boot[(k-1)*p + 1:p,],D=D)$sigma2;
+      
+      Mat.obj.FULL <- mat.setup(DATA.boot,train,K,p,D=D)
     }
     
     ######
@@ -230,7 +237,13 @@ for (bl.len in bl.len.set){
     ######
     
     if (R==0){
-      Mat.obj.FULL <- mat.setup(DATA,train,K,p,d=1)
+      
+      ### Calculating maximum likelihood estimates of sigma^2 for each subject
+      sigma2 <- rep(0,K)
+      for (k in 1:K) sigma2[k] <- OLS.tseries(DATA[(k-1)*p + 1:p,],D=D)$sigma2
+      
+      ### Setting up matrices for standard regression
+      Mat.obj.FULL <- mat.setup(DATA,train,K,p,D=D)
     }
     
     C.list <- Mat.obj.FULL$C
@@ -275,8 +288,8 @@ for (bl.len in bl.len.set){
         ## FIRST STAGE: Group lasso estimation of common component ####
         ###############################################################
         
-          r <- grpreg(X.list,
-                      Y,
+          r <- grpreg(X.list/sqrt(sigma2[j]),
+                      Y/sqrt(sigma2[j]),
                       group=group,
                       penalty="grLasso",
                       family="gaussian",
@@ -311,8 +324,8 @@ for (bl.len in bl.len.set){
         
           X.zero <- X.list[,gl.zeros[[j]]]
 
-          r <- glmnet(X.zero,
-                      Y,
+          r <- glmnet(X.zero/sqrt(sigma2[j]),
+                      Y/sqrt(sigma2[j]),
                       family="gaussian",
                       standardize=standardize,
                       intercept=intercept)
