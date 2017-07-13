@@ -1,12 +1,12 @@
-# setwd("/home/usdandres/Documents/Study_stuff/George/Group_Lasso_Project/Research18/")
+#setwd("/home/usdandres/Documents/Study_stuff/George/Group_Lasso_Project/Research18/")
 source("Group.Lasso.Paper.Functions.R")
 
 set.seed(2)
 
 
-p <- 20                                     # number of variables per subject
+p <- 10                                     # number of variables per subject
 print(c("p",p))
-t.set <- c(50)                             # number of observed time points per subject
+t.set <- c(30)                             # number of observed time points per subject
 print(c("t.set:",t.set))
 K.set <- c(20)                              # number of subjects per group
 print(c("K.set:",K.set))
@@ -206,9 +206,8 @@ for(K in K.set){
                         Sigma_error=Sigma.full)
         
         ### Calculating maximum likelihood estimates of sigma^2 for each subject
-        
-           sigma2 <- rep(0,K)
-           for (k in 1:K) sigma2[k] <- OLS.tseries(DATA[(k-1)*p + 1:p,],D=D)$sigma2
+        sigma2 <- rep(0,K)
+        for (k in 1:K) sigma2[k] <- OLS.tseries(DATA[(k-1)*p + 1:p,],D=D)$sigma2
         
         
         #############################
@@ -216,23 +215,16 @@ for(K in K.set){
         #############################
         
         M.setup <- mat.setup(DATA,t,K,p,D=D) 
-
         C.list <- M.setup$C
-        B.list <- M.setup$B
         X.list <- M.setup$X
         
-        ### vector of group number assignments
-        
+        ### Vector of group number assignments for group lasso
         group <- c(1:(D*p))
         if (K>1){
-          for (j in 2:K){
-            group <- c(group,1:(D*p))
-          }
+          for (j in 2:K) group <- c(group,1:(D*p))
         }
         
-        
         ## Initializing vectors to contain estimates during algorithm iterations
-        
         grouplasso.result_before <- make.list(numeric(D*K*p),p)
         seplasso.result_before <- make.list(numeric(D*K*p),p)
         seplasso.result <- make.list(numeric(D*K*p),p)
@@ -248,20 +240,18 @@ for(K in K.set){
             it <- it+1
             #  print(paste("Iter:",it,sep=""))
             
-            lasso.freq <- matrix(0,1,D*K*p)  
-            grouplasso.freq <- matrix(0,1,D*K*p)
-            Y <- numeric(K*(t-D))
-            
-            Xbeta <- X.list %*% seplasso.result[[j]]
-            
-            for (k in 1:K){
-              Y[(k-1)*(t-D) + (1:(t-D))] <- C.list[1:(t-D),j + (k-1)*p] - Xbeta[(k-1)*(t-D) + (1:(t-D))]
-            }
-            
             ###############################################################
             ## FIRST STAGE: Group lasso estimation of common component ####
             ###############################################################
             
+            ### Initializing response vector and data matrix for standard regression problems for the first stage
+            Y <- numeric(K*(t-D))
+            Xbeta <- X.list %*% seplasso.result[[j]]
+            for (k in 1:K){
+              Y[(k-1)*(t-D) + (1:(t-D))] <- C.list[1:(t-D),j + (k-1)*p] - Xbeta[(k-1)*(t-D) + (1:(t-D))]
+            }
+            
+            ### Doing group lasso optimization
               r <- grpreg(X.list/sqrt(sigma2[j]),
                           Y/sqrt(sigma2[j]),
                           group=group,
@@ -274,6 +264,7 @@ for(K in K.set){
               est <- r$beta[-1,]
               grouplasso.result.df <- r$df
               
+           ### Tuning parameter selection
               if (criter == "AIC")
                 group.est.out <- AIC(as.matrix(est),X.list,as.matrix(Y),p=p,K=K,lambda.path=lambda_G.path,df.path=grouplasso.result.df)
               if (criter == "BIC")
@@ -285,32 +276,32 @@ for(K in K.set){
               lambda.group <- group.est.out$lambda1
               
               
-            ####################################################################
-            ## SECOND STAGE: Sparse lasso estimation of individual component ###
-            ####################################################################
-            
+              ###############################################################
+              ## SECOND STAGE: Group lasso estimation of common component ###
+              ###############################################################
+              
+              ### Initializing response vector and data matrix for standard regression problem for the second stage
              gl.zeros[[j]] <- (grouplasso.result[[j]] == 0)
-            
              Xbeta <- X.list %*% grouplasso.result[[j]]
              for (k in 1:K){
                Y[(k-1)*(t-D) + (1:(t-D))] <- C.list[1:(t-D),j + (k-1)*p] - Xbeta[(k-1)*(t-D) + (1:(t-D))]
              }
-            
-               X.zero <- X.list[,gl.zeros[[j]]]
+             X.zero <- X.list[,gl.zeros[[j]]]
 
+             ### Doing sparse lasso optimization
                r <- glmnet(X.zero/sqrt(sigma2[j]),
                            Y/sqrt(sigma2[j]),
                            family="gaussian",
                            standardize=standardize,
                            intercept=intercept)
             
-             
               lambda_SPARS.path <- r$lambda
               est <- r$beta
               sep.df <- r$df
 
+              ### Tuning parameter selection
               if (criter.second == "AIC")
-                sep.est.out <- AIC(as.matrix(est),X.zero,as.matrix(Y),p=p,K=K,df.path=sep.df,df.coef=df.coef,lambda.path=lambda_SPARS.path)
+                sep.est.out <- AIC(as.matrix(est),X.zero,as.matrix(Y),p=p,K=K,df.path=sep.df,lambda.path=lambda_SPARS.path)
               if (criter.second == "BIC")
                 sep.est.out <- BIC(as.matrix(est),X.zero,as.matrix(Y),p=p,K=K,df.path=sep.df,lambda.path=lambda_SPARS.path)
               if (criter.second == "AICc")
@@ -320,6 +311,7 @@ for(K in K.set){
               seplasso.result[[j]] <- rep(0,D*p*K)
               seplasso.result[[j]][gl.zeros[[j]]] <- sparsify(sep.est.out$Est, Thresh2)
 
+              ### Recording estimates
               for (k in 1:K){
                 Group.Est[[k]][j,] <- grouplasso.result[[j]][(k-1)*p+(D-1)*(p) + (1:p)]
                 Sep.Est.Second[[k]][j,] <- seplasso.result[[j]][(k-1)*p+(D-1)*(p) + (1:p)]
@@ -327,7 +319,7 @@ for(K in K.set){
               
             if (it>1){
               #####
-              ## STOPPING CRITERION
+              ## STOPPING CRITERION for the two-stage estimation algorithm
               #####
                 diff_magnitudes <- sum((c(grouplasso.result[[j]],seplasso.result[[j]])-c(grouplasso.result_before[[j]],seplasso.result_before[[j]]))^2)
                 # print(diff_magnitudes)
@@ -336,6 +328,7 @@ for(K in K.set){
                   n.iter[run,j] <- it
                 }
             }
+              ### keeping track of estimates from previous iterations
               grouplasso.result_before <- grouplasso.result  
               seplasso.result_before <- seplasso.result  
           }
@@ -364,19 +357,16 @@ for(K in K.set){
       #### METRICS FOR FULL ESTIMATE
       #######
       
-
-        true.vec <- NULL
-        Rand.pen.vec <- NULL
-        
-        for (k in 1:K){
-          A.bind <- A.true$A.true[[k]][[1]]
-          if (D>1) for (d in 2:D) A.bind <- rbind(A.bind,A.true$A.true[[k]][[d]])
-          true.vec <- c(true.vec,A.bind)
-          Rand.pen.vec <- c(Rand.pen.vec,vec(Group.Final[[k]]))
-          }
+      true.vec <- NULL
+      Rand.pen.vec <- NULL
+      for (k in 1:K){
+        A.bind <- A.true$A.true[[k]][[1]]
+        if (D>1) for (d in 2:D) A.bind <- rbind(A.bind,A.true$A.true[[k]][[d]])
+        true.vec <- c(true.vec,A.bind)
+        Rand.pen.vec <- c(Rand.pen.vec,vec(Group.Final[[k]]))
+      }
       
       Measures.Joint <- Measures.Vec(Rand.pen.vec,as.matrix(true.vec))
-      
       FP.Rand.pen[run] <- Measures.Joint$FP
       FN.Rand.pen[run] <- Measures.Joint$FN
       TP.Rand.pen[run] <- Measures.Joint$TP
@@ -392,7 +382,6 @@ for(K in K.set){
       
       true.vec.comm <- NULL
       Rand.pen.vec.comm <- NULL
-      
       for (k in 1:K){
         A.bind <- A.true$A.comm[[1]]
         if (D>1) for (d in 2:D) A.bind <- rbind(A.bind,A.true$A.comm[[d]])
@@ -401,7 +390,6 @@ for(K in K.set){
       }
       
       Measures.Joint <- Measures.Vec(Rand.pen.vec.comm,as.matrix(true.vec.comm))
-      
       FP.Rand.pen.comm[run] <- Measures.Joint$FP
       FN.Rand.pen.comm[run] <- Measures.Joint$FN
       TP.Rand.pen.comm[run] <- Measures.Joint$TP
@@ -417,17 +405,14 @@ for(K in K.set){
       
       true.vec.ind <- NULL
       Rand.pen.vec.ind <- NULL
-      
-  
-          for(k in 1:K){
-            A.bind <- A.true$A.ind[[k]][[1]]
-            if (D>1) for (d in 2:D) A.bind <- rbind(A.bind,A.true$A.ind[[k]][[d]])
-            true.vec.ind <- c(true.vec.ind,A.bind)
-            Rand.pen.vec.ind <- c(Rand.pen.vec.ind,vec(Sep.Est.Second[[k]]))
-          }
+      for(k in 1:K){
+        A.bind <- A.true$A.ind[[k]][[1]]
+        if (D>1) for (d in 2:D) A.bind <- rbind(A.bind,A.true$A.ind[[k]][[d]])
+        true.vec.ind <- c(true.vec.ind,A.bind)
+        Rand.pen.vec.ind <- c(Rand.pen.vec.ind,vec(Sep.Est.Second[[k]]))
+      }
       
       Measures.Joint <- Measures.Vec(Rand.pen.vec.ind,as.matrix(true.vec.ind))
-      
       FP.Rand.pen.ind[run] <- Measures.Joint$FP
       FN.Rand.pen.ind[run] <- Measures.Joint$FN
       TP.Rand.pen.ind[run] <- Measures.Joint$TP
@@ -436,7 +421,6 @@ for(K in K.set){
                                                    FP.Rand.pen.ind[run],
                                                    TN.Rand.pen.ind[run],
                                                    FN.Rand.pen.ind[run])
-      
     }
     
       ###############################################

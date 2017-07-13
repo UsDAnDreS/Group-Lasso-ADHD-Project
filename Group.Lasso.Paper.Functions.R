@@ -35,13 +35,13 @@ block.diag <- function(A.list){
 ### GENERATES TRANSITION MATRIX FOR THE TIME SERIES
 #####################
 
-gen_A = function(  # returns a list of d matrices A_1, ..., A_d
+gen_A = function(  # returns a list of D matrices A_1, ..., A_d
   p    # generate p x p VAR
-  ,D=1   # generate VAR(d)
+  ,D=1   # generate VAR(D)
   ,max_eig   # spectral norm of A
   ,edge_density = 0.1 # if different for different lags, provide a vector of length d
   ,nonzero_diag = 1  # ensure all diagonal entries are non-zero; if different for different lags, provide a d-vector of 0 and 1
-  ,signs = c(1,-1)  # whether we allow for both + and - elements (c(1,-1)), or just + (1), or just - (-1)
+  ,signs = c(1,-1)  # whether we allow for both pos and neg elements (c(1,-1)), just pos (1), or just neg (-1)
   ,pos.diag = T     # whether all diagonal elements should be positive
   ,stationary = 1  # ensure stationarity
   ,network.family = "random"  # A matrix filled randomly or with specific structure
@@ -98,16 +98,18 @@ gen_A = function(  # returns a list of d matrices A_1, ..., A_d
   )
 }
 
+
 ################
 ##### Function generating a group of related VAR transition matrices
 ################
 
-
-A.setup <- function( # returns K transition matrices
+A.setup <- function( # returns K full transition matrices,
+                     #         one common component matrix,
+                     #         K individual component matrices
   p,          # number of variables
   D=1,        # order of VAR
   ed,    #  edge density - proportion of non-zero off-diagonal elements in the common matrix
-  signs = c(1,-1),  # whether we allow for both + and - elements (c(1,-1)), or just + (1), or just - (-1)  
+  signs = c(1,-1),  # whether we allow for both pos and neg elements (c(1,-1)), or just pos (1), or just neg (-1)  
   pos.diag=pos.diag, # whether diagonal should be positive
   comm,  #  for the case of different matrices - proportion of off-diagonal elements that are not part of common matrix
   max_eig_comm,  #  maximum eigenvalue of transition matrices
@@ -189,7 +191,7 @@ A.setup <- function( # returns K transition matrices
 
 
 ##################
-### GENERATES DATA WITH PARTICULAR TRANSITION MATRIX AND ERROR MATRIX
+### GENERATES DATA WITH PARTICULAR TRANSITION MATRICES AND ERROR COVARIANCE STRUCTURE
 ###################
 
 require(MASS)
@@ -261,10 +263,9 @@ sparsify <- function(m,a){
 
 
 ####################
-#### Converts a vectorized matrix (which was stretched into a 1-dimensional vector)
+#### Converts a vectorized matrix (which was stretched into a 1-dimensional vector of regression coefficients)
 #### back into its original form
 ####################
-
 
 ConvertToMatrix.Full <- function(# returns a list of matrices(one matrix per entity)
   vec,        #vectorized matrix
@@ -277,25 +278,6 @@ ConvertToMatrix.Full <- function(# returns a list of matrices(one matrix per ent
   }
   return(A)
 }
-
-
-##########################################################
-## Function connListCalc: calculates a connection list
-## for group lasso for p vars per subject 
-## It matches corresponding elements of multiple transition matrices into groups
-##########################################################
-
-connListCalc <- function(p){  # returns the connection list
-  
-  connList <- vector("list",2*p^2)
-  class(connList) <- "connListObj"
-  for (i in 1:(p^2)) connList[[i]] <- as.integer(i+p^2-1)
-  for (i in (p^2+1):(2*(p^2))) connList[[i]] <- as.integer(i- p^2-1)
-  
-  return(connList=connList)
-}
-
-
 
 
 #################################################################################
@@ -330,7 +312,7 @@ connListCalc <- function(p){  # returns the connection list
 ### AIC criterion ##############################
 ###############################################
 
-AIC <- function(Est,X,Y,lambda.path,df.path,p,K=1,df.coef=2){
+AIC <- function(Est,X,Y,lambda.path,df.path,p,K=1){
   
   AIC <- rep(0,length(lambda.path))
   loglik.part <- rep(0,length(lambda.path))
@@ -341,7 +323,7 @@ AIC <- function(Est,X,Y,lambda.path,df.path,p,K=1,df.coef=2){
   for(i in 1:length(lambda.path)){
     df <- df.path[i]
     loglik.part[i] <- 2*n*log(norm(Y - X %*% Est[,i],type="F")/sqrt(n))
-    df.part[i] <- df.coef*df
+    df.part[i] <- df
     AIC[i] <- loglik.part[i] + df.part[i]  
   }
   
@@ -432,7 +414,7 @@ Matthews.Coef <- function(TP,FP,TN,FN){
 
 ##################
 ## MAKES A LIST OF n ELEMENTS
-## Elem - type of the elements(matrices,lists, whatever it maybe)
+## Elem - type of the elements(matrices,lists, whatever it may be)
 ##################
 
 make.list <- function(elem,n){
@@ -446,10 +428,19 @@ make.list <- function(elem,n){
 
 ###########################
 ### Compact Matrix Form Setup function (as in Problem Setup section of the paper)
-### Transforms the original K p-dimensional time series of length n.tp into matrices C,X,B
+### Transforms the K original p-dimensional time series of length n.tp into matrices C and X of the regression problem. 
+### From section 2.3 of the paper, algorithm description for arbitrary j=1,...p:
+###   C denotes X^{tilde}_j from the paper, X denotes B^{tilde} from the paper,
+###   C = X*(x_j^C + x_j^I) + errors
 ###########################
 
-mat.setup <- function(ts,n.tp,K,p,D=1){
+mat.setup <- function( # outputs matrices C (X^{tilde}_j) and X (B^{tilde}) for regression setup in section 2.3
+                       ts,      # time series matrix, rows - variables, columns - time points
+                       n.tp,    # number of observed time points T
+                       K,       # number of subjects
+                       p,       # number of variables per subject
+                       D=1      # order of VAR model
+                       ){
   C.mat <- matrix(0,n.tp-D,K*p)
   for (i in 1:(n.tp-D)){
     for (k in 1:K){
@@ -478,7 +469,6 @@ mat.setup <- function(ts,n.tp,K,p,D=1){
   X.list.mat <- block.diag(B.list.mat)
   
   return(list(C=C.mat,
-              B=B.mat,
               X=X.list.mat))
 }
 
@@ -486,9 +476,8 @@ mat.setup <- function(ts,n.tp,K,p,D=1){
 #### OLS estimation for a time series ##
 ########################################
 
-
 OLS.tseries <- function(# returns the OLS estimate for transition matrices,
-                              #         maximum likelihood estimate of variance
+                        #         maximum likelihood estimate of variance
   Data, # time series matrix, rows - variables, columns - time points
   D=1   # order of VAR model for the OLS fit
 ){   

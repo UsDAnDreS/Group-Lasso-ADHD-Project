@@ -1,4 +1,4 @@
-# setwd("/home/usdandres/Documents/Study_stuff/George/Group_Lasso_Project/Research18")
+#setwd("/home/usdandres/Documents/Study_stuff/George/Group_Lasso_Project/Research18")
 source("Group.Lasso.Paper.Functions.R")
 
 region_names <- c("Left Auditory Cortex",
@@ -89,8 +89,8 @@ print(c("K:",K))
 R <- 50                                                                  # number of bootstrapped samples 
 print(c("R:",R))                                                        # (if R == 0 then just make SINGLE RUN for all T time points, no bootstrapping)
 
-bl.len.set <- c(0.3)                                                    # length of generated block bootstraps (as proportion of number of time points)
-print(c("bl.len.set",bl.len.set))
+bl.len <- 0.3                                                          # length of generated block bootstraps (as proportion of number of time points)
+print(c("bl.len",bl.len))
 offset <- 0                                                             # whether to skip some initial time points of fMRI measurements
 print(c("offset:", offset))
 D <- 1                                                                  # VAR(D), data fits well for VAR(1), so this code works solely with VAR(1)
@@ -118,22 +118,19 @@ intercept <- FALSE
 standardize <- TRUE
 
 
-###########################################33
+###########################################
 
 ### Initializing some vectors
+
 n.iter <- array(0,c(R,p))
 t <- train
-
 ptm <- proc.time()
-
-
 if (R == 0){
   Group.Est <- make.list(matrix(0,p,p),K)
   Sep.Est.Second <-  make.list(matrix(0,p,p),K)
   Group.Final <- make.list(matrix(0,p,p),K)
   Group.Prop <- matrix(0,p,p)
 }
-
 if (R > 0){
   Group.Est <- make.list(make.list(matrix(0,p,p),R),K)
   Sep.Est.Second <-  make.list(make.list(matrix(0,p,p),R),K)
@@ -141,17 +138,16 @@ if (R > 0){
   Group.Prop.Resamp <- make.list(matrix(0,p,p),R)
   Group.Prop <- matrix(0,p,p)
 }
+  ################
+  ### Creating directory to put the saved .rds files with estimates into
+  ################
 
-for (bl.len in bl.len.set){
-  
-  print(c("bl.len:",bl.len))
-  
   final_path <- paste("ADHD_MSDL_Two_Groups_Thresh=",Thresh2,"_p=",p,"_t=",train,"_K=",K,"_R=",R,"_criter.comm=",criter.comm,"_criter.ind=",criter.ind,"_Thresh=",Thresh2,sep="")
   dir.create(final_path)
   
-  ################################
-  ####### DATA GENERATION ########
-  ################################
+  ##################################
+  ####### SAMPLING THE DATA ########
+  ##################################
   
   selection_1 <- sample(select_ind_1,K)
   selection_2 <- sample(select_ind_2,K)
@@ -223,12 +219,11 @@ for (bl.len in bl.len.set){
       DATA.boot <- matrix(0,dim(DATA)[1],dim(DATA)[2])
       
       ### Calculating maximum likelihood estimates of sigma^2 for each subject
-      
       for (j in 1:K)  DATA.boot[(j-1)*p + 1:p,] <- Data.boot[[j]][[i]]
-      
       sigma2 <- rep(0,K)
       for (k in 1:K) sigma2[k] <- OLS.tseries(DATA.boot[(k-1)*p + 1:p,],D=D)$sigma2;
       
+      ### Setting up matrices for standard regression
       Mat.obj.FULL <- mat.setup(DATA.boot,train,K,p,D=D)
     }
     
@@ -237,7 +232,6 @@ for (bl.len in bl.len.set){
     ######
     
     if (R==0){
-      
       ### Calculating maximum likelihood estimates of sigma^2 for each subject
       sigma2 <- rep(0,K)
       for (k in 1:K) sigma2[k] <- OLS.tseries(DATA[(k-1)*p + 1:p,],D=D)$sigma2
@@ -247,7 +241,6 @@ for (bl.len in bl.len.set){
     }
     
     C.list <- Mat.obj.FULL$C
-    B.list <- Mat.obj.FULL$B
     X.list <- Mat.obj.FULL$X
     
     ### vector of group number assignments
@@ -273,21 +266,19 @@ for (bl.len in bl.len.set){
       while ((it<max.iter) & (flag==0)){ 
         it <- it+1
         print(paste("Iter:",it,sep=""))
-  
-        lasso.freq <- matrix(0,1,K*p)  
-        grouplasso.freq <- matrix(0,1,K*p)
-        Y <- numeric(K*(t-1))
         
-        Xbeta <- X.list %*% seplasso.result[[j]]
-        
-        for (k in 1:K){
-          Y[(k-1)*(t-1) + (1:(t-1))] <- C.list[1:(t-1),j + (k-1)*p] - Xbeta[(k-1)*(t-1) + (1:(t-1))]
-        }
-          
         ###############################################################
         ## FIRST STAGE: Group lasso estimation of common component ####
         ###############################################################
         
+        ### Initializing response vector and data matrix for standard regression problems for the first stage
+        Y <- numeric(K*(t-1))
+        Xbeta <- X.list %*% seplasso.result[[j]]
+        for (k in 1:K){
+          Y[(k-1)*(t-1) + (1:(t-1))] <- C.list[1:(t-1),j + (k-1)*p] - Xbeta[(k-1)*(t-1) + (1:(t-1))]
+        }
+          
+        ### Doing group lasso optimization
           r <- grpreg(X.list/sqrt(sigma2[j]),
                       Y/sqrt(sigma2[j]),
                       group=group,
@@ -299,7 +290,8 @@ for (bl.len in bl.len.set){
           lambda_G.path <- r$lambda
           est <- r$beta[-1,]
           grouplasso.result.df <- r$df
-
+          
+          ## Tuning parameter selection
           if (criter.comm == "AIC")
             group.est.out <- AIC(as.matrix(est),X.list,as.matrix(Y),p=p,K=K,lambda.path=lambda_G.path,df.path=grouplasso.result.df)
           if (criter.comm == "BIC")
@@ -315,15 +307,15 @@ for (bl.len in bl.len.set){
           ## SECOND STAGE: Group lasso estimation of common component ###
           ###############################################################
         
+          ### Initializing response vector and data matrix for standard regression problem for the second stage
           gl.zeros[[j]] <- (grouplasso.result[[j]] == 0)
-        
           Xbeta <- X.list %*% grouplasso.result[[j]]
           for (k in 1:K){
             Y[(k-1)*(t-1) + (1:(t-1))] <- C.list[1:(t-1),j + (k-1)*p] - Xbeta[(k-1)*(t-1) + (1:(t-1))]
           }
-        
           X.zero <- X.list[,gl.zeros[[j]]]
 
+          ### Doing sparse lasso optimization
           r <- glmnet(X.zero/sqrt(sigma2[j]),
                       Y/sqrt(sigma2[j]),
                       family="gaussian",
@@ -334,8 +326,9 @@ for (bl.len in bl.len.set){
           est <- r$beta
           sep.df <- r$df
           
+          ### Tuning parameter selection
           if (criter.ind == "AIC")
-            sep.est.out <- AIC(as.matrix(est),X.zero,as.matrix(Y),p=p,K=K,df.path=sep.df,df.coef=df.coef,lambda.path=lambda_SPARS.path)
+            sep.est.out <- AIC(as.matrix(est),X.zero,as.matrix(Y),p=p,K=K,df.path=sep.df,lambda.path=lambda_SPARS.path)
           if (criter.ind == "BIC")
             sep.est.out <- BIC(as.matrix(est),X.zero,as.matrix(Y),p=p,K=K,df.path=sep.df,lambda.path=lambda_SPARS.path)
           if (criter.ind == "AICc")
@@ -344,14 +337,14 @@ for (bl.len in bl.len.set){
           lambda.sparse <- sep.est.out$lambda1
           seplasso.result[[j]] <- rep(0,p*K)
           seplasso.result[[j]][gl.zeros[[j]]] <- sparsify(sep.est.out$Est, Thresh2)
-          
+        
+        ### Recording estimates
         if (R>0){
           for (k in 1:K){
             Group.Est[[k]][[i]][j,] <- grouplasso.result[[j]][(k-1)*p+(1:p)]
             Sep.Est.Second[[k]][[i]][j,] <- seplasso.result[[j]][(k-1)*p+(1:p)]
           }
         }
-        
         if (R == 0){
           for (k in 1:K){
             Group.Est[[k]][j,] <- grouplasso.result[[j]][(k-1)*p+(1:p)]
@@ -361,7 +354,7 @@ for (bl.len in bl.len.set){
 
         if (it>1){
           #####
-          ## STOPPING CRITERIONS
+          ## STOPPING CRITERION for the two-stage estimation algorithm
           #####
             diff_magnitudes <- sum((c(grouplasso.result[[j]],seplasso.result[[j]])-c(grouplasso.result_before[[j]],seplasso.result_before[[j]]))^2)
          #  print(diff_magnitudes)
@@ -370,6 +363,8 @@ for (bl.len in bl.len.set){
               n.iter[i,j] <- it
             }
         }
+          
+        ### keeping track of estimates from previous iterations
         grouplasso.result_before <- grouplasso.result  
         seplasso.result_before <- seplasso.result  
       }
@@ -424,7 +419,7 @@ for (bl.len in bl.len.set){
   saveRDS(Group.Est,paste(final_path,"/Full_Estimates_GN=",GN,".rds",sep=""))
   saveRDS(Sep.Est.Second,paste(final_path,"/Individ_Estimates_GN=",GN,".rds",sep=""))
   saveRDS(n.iter,paste(final_path,"/NumberIter_GN=",GN,".rds",sep=""))
-}
+
 
 time.taken <- proc.time() - ptm
 #print("Time taken:")
