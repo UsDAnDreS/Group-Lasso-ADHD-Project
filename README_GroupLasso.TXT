@@ -1,3 +1,8 @@
+ALL THE FILES CAN BE FOUND ON PUBLIC ACCESS REPOSITORY:
+
+https://github.com/UsDAnDreS/Group-Lasso-ADHD-Project
+
+
 ####################
 ##  Group.Lasso.Paper.Functions.R
 ####################
@@ -16,6 +21,12 @@ Executive file for the simulation study from Section 3. Outputs some results in 
 ####################
 
 Executive file for the ADHD-200 study from Section 4. Saves resulting estimates (of full transition matrix, of common and individual components) and other characteristics (stability selection proportions, algorithm convergence metrics) into a folder as .rds files. You can customize such parameters as: number of bootstrapped samples to run, which group to estimate, what hard threshold to apply, which tuning parameter selection criterions to use, etc. More details can be found in the code comments.
+
+####################
+## Group.Lasso.Paper.ADHD.Output.Plots.R
+####################
+
+Executive file to obtain graphs and phenotypic summaries corresponding to estimates outputted by 'Group.Lasso.Paper.ADHD.Study.R'.
 
 
 ####################

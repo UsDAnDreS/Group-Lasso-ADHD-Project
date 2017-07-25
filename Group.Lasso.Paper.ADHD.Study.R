@@ -1,46 +1,8 @@
+# Executive file for ADHD study
+
 #setwd("/home/usdandres/Documents/Study_stuff/George/Group_Lasso_Project/Research18")
+
 source("Group.Lasso.Paper.Functions.R")
-
-region_names <- c("Left Auditory Cortex",
-                  "Right Auditory Cortex",
-                  "Stria terminalis",
-                  "Left Default Mode Network",
-                  "Medial Prefrontal Cortex",
-                  "Front Default Mode Network",
-                  "Right Default Mode Network",
-                  "Occipital Lobe",
-                  "Motor Cortex",
-                  "Right Dorsolateral Prefrontal Cortex",
-                  "Right Polar Frontal Lobe",
-                  "Right Parietal Lobe",
-                  "Right Inferior Temporal Cortex",
-                  "Basal Ganglia",
-                  "Left Parietal Lobe",
-                  "Left Dorsolateral Prefrontal Cortex",
-                  "Left Polar Frontal Lobe",
-                  "Left Intraparietal Sulcus",
-                  "Right Intraparietal Sulcus",
-                  "Left Lateral Occipital Complex",
-                  "Primary Visual Cortex",
-                  "Right Lateral Occipital Complex",
-                  "Dorsal Anterior Cingulate Cortex",
-                  "Ventral Anterior Cingulate Cortex",
-                  "Right Anterior Insular Cortex",
-                  "Left Superior Temporal Sulcus",
-                  "Right Superior Temporal Sulcus",
-                  "Left Temporoparietal Junction",
-                  "Broca Area of Frontal Lobe",
-                  "Superior Frontal",
-                  "Right Temporoparietal Junction",
-                  "Pars Opercularis",
-                  "Cerebellum",
-                  "Dorsal Posterior Cingulate Cortex",
-                  "Left Insular Cortex",
-                  "Cingulate Cortex",
-                  "Right Insular Cortex",
-                  "Left Anterior Intraparietal Sulcus",
-                  "Right Anterior Intraparietal Sulcus")
-
 
 ## Uploading ADHD and controls data
 
@@ -49,8 +11,19 @@ set.seed(2)
 new_path <- paste(initial_path,"/ADHD200",sep="")
 setwd(new_path)
 
-temp_ADHD = list.files(path=getwd(),pattern=('ADHD=1.*MSDL.*.*detrend=True_standardize=True_TimeSeries.csv'))
-temp_Control = list.files(path=getwd(),pattern=('ADHD=0.*MSDL.*.*detrend=True_standardize=True_TimeSeries.csv'))
+temp_ADHD = list.files(path=getwd(),pattern=('ADHD=1_TR=2.*MSDL.*.*detrend=True_standardize=True_TimeSeries.csv'))
+temp_Control = list.files(path=getwd(),pattern=('ADHD=0_TR=2.*MSDL.*.*detrend=True_standardize=True_TimeSeries.csv'))
+  
+phenotypic_ADHD = list.files(path=getwd(),pattern=('ADHD=1_TR=2.*MSDL.*.*detrend=True_standardize=True_Phenotypic.csv'))
+phenotypic_Control = list.files(path=getwd(),pattern=('ADHD=0_TR=2.*MSDL.*.*detrend=True_standardize=True_Phenotypic.csv'))
+
+############
+## PHENOTYPIC DATA
+############
+
+phenotypic <- list()
+phen_ADHD = lapply(phenotypic_ADHD,function(x) read.csv(x,header=F))
+phen_Control = lapply(phenotypic_Control,function(x) read.csv(x,header=F))
 
 
 #####
@@ -58,25 +31,33 @@ temp_Control = list.files(path=getwd(),pattern=('ADHD=0.*MSDL.*.*detrend=True_st
 ## Then pick all the patients that have at least this many observations
 #####
 
-train <- c(120)                                                            # number of observed time points for each subject
+train <- c(150)
 print(c("train:",train))
+
+###############
+### TIME SERIES DATA
+###############
 
 myfiles_ADHD = lapply(temp_ADHD,function(x) read.csv(x,header=F))
 Total1 <- length(myfiles_ADHD)
-select_ind_1 <- unlist(lapply(myfiles_ADHD,function(x) dim(x)[1]>train))
+#unlist(lapply(myfiles_ADHD,function(x) dim(x)[1]))
+select_ind_1 <- unlist(lapply(myfiles_ADHD,function(x) dim(x)[1]>=train))
 select_ind_1 <- c(1:Total1)[select_ind_1]
+phenotypic[[1]] <- phen_ADHD[select_ind_1]
 
 myfiles_Control = lapply(temp_Control,function(x) read.csv(x,header=F))
 Total2 <- length(myfiles_Control)
-select_ind_2 <- unlist(lapply(myfiles_Control,function(x) dim(x)[1]>train))
+#unlist(lapply(myfiles_Control,function(x) dim(x)[1]))
+select_ind_2 <- unlist(lapply(myfiles_Control,function(x) dim(x)[1]>=train))
 select_ind_2 <- c(1:Total2)[select_ind_2]
+phenotypic[[2]] <- phen_Control[select_ind_2]
 
 
 print(c("Total1:",Total1))                                                # total of ADHD patients with >t time points observed
 print(c("Total2:",Total2))                                                # total of control patients with >t time points observed
 
 ### Which patient group will be estimated: 1 (ADHD) or 2 (Control)
-GN <- 1
+GN <- 2
 print(c("GN:",GN))
 
 #p <- 5
@@ -86,7 +67,7 @@ Thresh2 <- 0.02                                                         # thresh
 print(c("Thresh2:",Thresh2))
 K <- min(length(select_ind_1),length(select_ind_2))                     # each group has at least K patients
 print(c("K:",K))
-R <- 50                                                                  # number of bootstrapped samples 
+R <- 100                                                                  # number of bootstrapped samples 
 print(c("R:",R))                                                        # (if R == 0 then just make SINGLE RUN for all T time points, no bootstrapping)
 
 bl.len <- 0.3                                                          # length of generated block bootstraps (as proportion of number of time points)
@@ -103,7 +84,7 @@ print(c("order:",D))
 
 criter.comm <- "BIC"                                                     # selection criterion for group lasso (first stage)
 print(c("criter.comm",criter.comm))
-criter.ind <- "BIC"                                                      # selection criterion for sparse lasso (second stage)
+criter.ind <- "AICc"                                                      # selection criterion for sparse lasso (second stage)
 print(c("criter.ind",criter.ind))
 max.iter <- 20                                                          # maximum number of iterations for the two-stage estimation algorithm
 print(c("max.iter",max.iter))
@@ -142,7 +123,7 @@ if (R > 0){
   ### Creating directory to put the saved .rds files with estimates into
   ################
 
-  final_path <- paste("ADHD_MSDL_Two_Groups_Thresh=",Thresh2,"_p=",p,"_t=",train,"_K=",K,"_R=",R,"_criter.comm=",criter.comm,"_criter.ind=",criter.ind,"_Thresh=",Thresh2,sep="")
+  final_path <- paste("PAPER_HOPEFULLY_FINAL_ADHD_MSDL_Two_Groups_Thresh=",Thresh2,"_p=",p,"_t=",train,"_K=",K,"_R=",R,"_criter.comm=",criter.comm,"_criter.ind=",criter.ind,"_Thresh=",Thresh2,sep="")
   dir.create(final_path)
   
   ##################################
@@ -219,9 +200,16 @@ if (R > 0){
       DATA.boot <- matrix(0,dim(DATA)[1],dim(DATA)[2])
       
       ### Calculating maximum likelihood estimates of sigma^2 for each subject
+      print("Calculating estimates for sigma_1^2,...,sigma_K^2")
       for (j in 1:K)  DATA.boot[(j-1)*p + 1:p,] <- Data.boot[[j]][[i]]
       sigma2 <- rep(0,K)
-      for (k in 1:K) sigma2[k] <- OLS.tseries(DATA.boot[(k-1)*p + 1:p,],D=D)$sigma2;
+      for (k in 1:K){
+        print(k)
+        sigma2[k] <- OLS.tseries(DATA.boot[(k-1)*p + 1:p,],D=D)$sigma2;
+      }
+      
+      print("sigma2 vector:")
+      print(sigma2)
       
       ### Setting up matrices for standard regression
       Mat.obj.FULL <- mat.setup(DATA.boot,train,K,p,D=D)
@@ -233,12 +221,19 @@ if (R > 0){
     
     if (R==0){
       ### Calculating maximum likelihood estimates of sigma^2 for each subject
+      print("Calculating estimates for sigma_1^2,...,sigma_K^2")
       sigma2 <- rep(0,K)
-      for (k in 1:K) sigma2[k] <- OLS.tseries(DATA[(k-1)*p + 1:p,],D=D)$sigma2
+      for (k in 1:K){
+        print(k)
+        sigma2[k] <- OLS.tseries(DATA[(k-1)*p + 1:p,],D=D)$sigma2
+      } 
       
+      print("sigma2 vector:")
+      print(sigma2)
       ### Setting up matrices for standard regression
       Mat.obj.FULL <- mat.setup(DATA,train,K,p,D=D)
     }
+    
     
     C.list <- Mat.obj.FULL$C
     X.list <- Mat.obj.FULL$X
@@ -279,8 +274,12 @@ if (R > 0){
         }
           
         ### Doing group lasso optimization
-          r <- grpreg(X.list/sqrt(sigma2[j]),
-                      Y/sqrt(sigma2[j]),
+        
+          D.sigma <- sqrt(diag(c(sapply(sigma2, function(x) return(rep(x,(t-D)))))))
+       #   r <- grpreg(X.list/sqrt(sigma2[j]),
+       #               Y/sqrt(sigma2[j]),
+          r <- grpreg(solve(D.sigma) %*% X.list,
+                      solve(D.sigma) %*%Y,
                       group=group,
                       penalty="grLasso",
                       family="gaussian",
@@ -316,8 +315,10 @@ if (R > 0){
           X.zero <- X.list[,gl.zeros[[j]]]
 
           ### Doing sparse lasso optimization
-          r <- glmnet(X.zero/sqrt(sigma2[j]),
-                      Y/sqrt(sigma2[j]),
+       #   r <- glmnet(X.zero/sqrt(sigma2[j]),
+       #               Y/sqrt(sigma2[j]),
+          r <- glmnet(solve(D.sigma) %*% X.zero,
+                      solve(D.sigma) %*% Y,
                       family="gaussian",
                       standardize=standardize,
                       intercept=intercept)

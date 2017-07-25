@@ -1,3 +1,5 @@
+# File with all the main functions used in other executive files
+
 rm(list=ls())
 
 ########################
@@ -8,6 +10,7 @@ library(glmnet)
 library(matrixcalc)
 library(grpreg)
 library(boot)
+library(methods)
 
 ##########################################
 ## Creates block-diagonal matrix       ###
@@ -130,23 +133,24 @@ A.setup <- function( # returns K full transition matrices,
       
       A.true <- list()
       A.ind <- list()
+      A.comm <- list()
       
       repeat{
         A.obj <- gen_A(p,D=D,ed=ed,signs=signs,max_eig=max_eig_comm,structure=structure)
         Signal <- A.obj$Signal
-        A.true <- A.obj$A
+        A.comm <- A.obj$A
         if (Signal > min_val) break;
       } 
       
       A.ind[[1]] <- make.list(matrix(0,p,p),D)
+      A.true[[1]] <- A.comm
       
       if (K>1){
         for (i in 2:K){
-          A.true[[i]] <- A.true
+          A.true[[i]] <- A.comm
           A.ind[[i]] <- A.ind[[1]]
         }
       }
-      A.comm <- A.true
       
       return(list(A.true=A.true,
                   A.comm=A.comm,
@@ -472,6 +476,34 @@ mat.setup <- function( # outputs matrices C (X^{tilde}_j) and X (B^{tilde}) for 
               X=X.list.mat))
 }
 
+
+#########################################################
+## Product of matrix M1 with block-diagonal matrix M2  ##
+## Matrix M2 consists of identical blocks "Block"      ##
+## Optimal calculation procedure through calculating   ##
+## products of smaller submatrices                     ##
+#########################################################
+
+optim.product <- function(#returns product of matrix M1 by block-diagonal matrix M2
+  M1,
+  Block,    # block of M2 matrix
+  nblocks   # number of diagonal blocks in M2
+  ){ 
+  dim1 <- nrow(M1)
+  Prod <- matrix(0,dim1,ncol(Block)*nblocks)
+  
+  p <- nblocks
+  D <- dim(Block)[2]/p
+  t <- dim1/nblocks
+  
+  for (i in 1:nblocks) 
+    for (j in 1:nblocks)
+      Prod[(i-1)*t + 1:t,(j-1)*(D*p) + 1:(D*p)] <- M1[(i-1)*t + 1:t,(j-1)*t + 1:t] %*% Block
+  
+  return(Prod)
+}
+
+
 ########################################
 #### OLS estimation for a time series ##
 ########################################
@@ -486,21 +518,26 @@ OLS.tseries <- function(# returns the OLS estimate for transition matrices,
   
   ### Setting up all the matrices for regression problem
   
-  ## Response matrix
-  Response <- matrix(c(t(Data[,-c(1:D)])))
-  n <- length(Response)
+  ### Response vector and data matrix
+  Response <- matrix(c(t(Data[,c(t:(D+1))])))
   
-  ## Data matrix
-  for (d in 1:D){
-     if (d==1) X <- matrix(Data[,c((t-d):(D-d+1))],t-D,p,byrow=TRUE)
-     if (d>1) X <- cbind(X,matrix(Data[,c((t-d):(D-d+1))],t-D,p,byrow=TRUE))
-  }
-  X.full <- block.diag(make.list(X,p))
+  X <- NULL
+  for (d in c(1:D)) X <- cbind(X,matrix(Data[,((t-d):(D-d+1))],t-D,p,byrow=TRUE))
+  X <- optim.product(diag(1,p) %x% diag(1,t-D),X,p)
+
+  X.full <- X
+  Y.full <- Response
   
-  ## Calculating OLS estimate for transition matrices and computing MLE estimate for sigma^2 from residuals
-  A.OLS <- solve(t(X.full)%*%X.full)%*%(t(X.full)%*%Response)
-  sigma2 <- sum(Response - X.full%*%A.OLS)^2/n
+  beta.hat <- solve(t(X.full)%*%X.full)%*%(t(X.full)%*%Y.full)
+  sigma2 <- sum((Y.full - X.full%*%beta.hat)^2)/nrow(X.full)
   
-  return(list(A.OLS = A.OLS,
+  return(list(beta.hat=beta.hat,
               sigma2=sigma2))
 }
+
+
+
+
+
+
+

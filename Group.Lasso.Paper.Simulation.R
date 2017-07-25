@@ -1,30 +1,33 @@
+### Executive file for simulation studies 
+
 #setwd("/home/usdandres/Documents/Study_stuff/George/Group_Lasso_Project/Research18/")
+
 source("Group.Lasso.Paper.Functions.R")
 
 set.seed(2)
 
 
-p <- 10                                     # number of variables per subject
+p <- 20                                     # number of variables per subject
 print(c("p",p))
-t.set <- c(30)                             # number of observed time points per subject
+t.set <- c(150)                      # number of observed time points per subject
 print(c("t.set:",t.set))
-K.set <- c(20)                              # number of subjects per group
+K.set <- c(40)                               # number of subjects per group
 print(c("K.set:",K.set))
-heter <- c("low","moderate")[1]             # level of heterogeneity: low (1%) or moderate (2-3%)
+heter <- c("low","moderate","none")[2]             # level of heterogeneity: low (1%) or moderate (2-3%)
 print(c("heter:",heter))
 Thresh2 <- 0.02                             # Threshold to be applied to estimates get rid of noise
 print(c("Thresh2:",Thresh2))
 signs <- c(1,-1)                            # Whether effects will be allowed to be positive(1), negative(-1) or both
 print(c("Signs:",signs))
-SNR <- 2                                    # Signal-to-Noise ratio
+SNR <- 1                                     # Signal-to-Noise ratio
 print(c("SNR:",SNR))
-spectral <- c(0.4,0.6)[1]                   # Maximum eigenvalue allowed in generated VAR transition matrices (either 0.4 or 0.6)
+spectral <- c(0.25,0.4,0.6)[1]            # Maximum eigenvalue allowed in generated VAR transition matrices (either 0.25, 0.4 or 0.6)
 print(c("spectral:",spectral))
 pos.diag <- T                               # whether all diagonal elements of VAR transition matrices should be positive
 print(c("pos.diag=",pos.diag))
 n.groups <- 1                               # number of subject groups generated
 print(c("n.groups:",n.groups))
-rep <- 1                                   # number of simulations to run
+rep <- 20                                    # number of simulations to run
 print(c("rep",rep))
 
 #####
@@ -72,6 +75,11 @@ if (heter == "low"){
   print(c("comm:",comm))
 }
 
+if (heter == "none"){
+  comm <- 0;
+  print(c("comm:",comm))
+}
+
 
 ###############
 ## Setting the spectral radius for both common and individual component, and the minimum value of non-zero element
@@ -96,6 +104,19 @@ if (spectral == 0.4){
   min_elem <- 0.2
   print(c("min_elem:",min_elem))
 }
+
+if (spectral == 0.25){
+  max_eig_comm <- 0.25
+  print(c("max_eig_comm:",sort(max_eig_comm)))
+  max_eig_ind <- 0.25
+  print(c("max_eig_ind:",sort(max_eig_ind)))
+  max_eig <- max(max_eig_comm,max_eig_ind)
+  max_eig.diff <- 0.15
+  print(c("max_eig.diff:",max_eig.diff))
+  min_elem <- max_eig - max_eig.diff
+  print(c("min_elem:",sort(min_elem)))
+}
+
 
 #####
 ## Parameters for glmnet function: no-intercept standardized model
@@ -148,12 +169,13 @@ for(K in K.set){
     
     n.iter <- array(0,c(rep,p))
     
-    namedir <- paste(getwd(),"/CONSTRAINED_Simul_Results_Thresh=",Thresh2,"_p=",p,"_t=",train,"_K=",K,"_Rep=",rep,"_SNR=",SNR,"_criter=",criter,"_criter-second=",criter.second,"_heter=",heter,"_signs=",length(signs),"_max_eig_comm=",max_eig_comm,"_max_eig_ind=",max_eig_ind,"_min_elem=",min_elem,sep="")
+    namedir <- paste(getwd(),"/PAPER_HOPEFULLY_FINAL_CONSTRAINED_Simul_Results_Thresh=",Thresh2,"_p=",p,"_t=",train,"_K=",K,"_Rep=",rep,"_SNR=",SNR,"_criter=",criter,"_criter-second=",criter.second,"_heter=",heter,"_signs=",length(signs),"_max_eig_comm=",max_eig_comm,"_max_eig_ind=",max_eig_ind,"_min_elem=",min_elem,sep="")
     dir.create(namedir) 
     
     for(run in 1:rep){
       print(c("run",run))
       
+      repeat{
       #####
       ## Generating VAR transition matrices
       #####
@@ -171,6 +193,49 @@ for(K in K.set){
         A.true.all[[run]] <- A.true$A.true
         A.comm.all[[run]] <- A.true$A.comm
         A.ind.all[[run]] <- A.true$A.ind
+       
+        A.list <- list()
+        
+        for (d in 1:D){
+          A.full <- list()
+          for (k in 1:K) A.full[[k]] <- A.true$A.true[[k]][[d]]
+          A.list[[d]] <- block.diag(A.full)
+        }
+        
+        Sigma <- list()
+        for(i in 1:K){
+          #Sigma[[i]] <- diag(runif(p,0,1))
+          Sigma[[i]] <- diag(1,p)
+        }
+        
+        Sigma.full <- block.diag(Sigma)
+        
+        ################################
+        ####### DATA GENERATION ########
+        ################################
+        
+        DATA <- gen_dat(T=t,
+                        A=A.list,
+                        SNR=SNR,
+                        Sigma_error=Sigma.full)
+        
+        print(max(abs(DATA)))
+        #  hist(DATA)
+        if (max(abs(DATA))<10) break;                  ### making sure generated time series doesn't go overboard with values of time points (happens occasionally)
+    }
+    
+      ### Calculating maximum likelihood estimates of sigma^2 for each subject
+      print("Calculating estimates for sigma_1^2,...,sigma_K^2")
+      sigma2 <- rep(0,K)
+      sds <- apply(DATA,1,function(x) sd(x))
+      for (k in 1:K){
+        sigma2[k] <- OLS.tseries(DATA[(k-1)*p + 1:p,],D=D)$sigma2
+        sigma2[k] <- (sds[(k-1)*p + 1:p])^2
+        print(k)
+      }
+      
+      print("sigma2 vector:")
+      print(sigma2)
       
         print("Generated")
 
@@ -190,26 +255,11 @@ for(K in K.set){
         
         Sigma <- list()
         for(i in 1:K){
-          #Sigma[[i]] <- diag(runif(p,0,1))
           Sigma[[i]] <- diag(1,p)               # simply setting the error covariance to be identity matrix
         }
         
         Sigma.full <- block.diag(Sigma)
-        
-        ################################
-        ####### DATA GENERATION ########
-        ################################
-        
-        DATA <- gen_dat(T=t,
-                        A=A.list,
-                        SNR=SNR,
-                        Sigma_error=Sigma.full)
-        
-        ### Calculating maximum likelihood estimates of sigma^2 for each subject
-        sigma2 <- rep(0,K)
-        for (k in 1:K) sigma2[k] <- OLS.tseries(DATA[(k-1)*p + 1:p,],D=D)$sigma2
-        
-        
+      
         #############################
         ### FULL PROBLEM SETUP   ####
         #############################
@@ -252,8 +302,10 @@ for(K in K.set){
             }
             
             ### Doing group lasso optimization
-              r <- grpreg(X.list/sqrt(sigma2[j]),
-                          Y/sqrt(sigma2[j]),
+            D.sigma <- sqrt(diag(c(sapply(sigma2, function(x) return(rep(x,(t-D)))))))
+
+              r <- grpreg(solve(D.sigma) %*% X.list,
+                          solve(D.sigma) %*% Y,
                           group=group,
                           penalty="grLasso",
                           family="gaussian",
@@ -289,8 +341,8 @@ for(K in K.set){
              X.zero <- X.list[,gl.zeros[[j]]]
 
              ### Doing sparse lasso optimization
-               r <- glmnet(X.zero/sqrt(sigma2[j]),
-                           Y/sqrt(sigma2[j]),
+               r <- glmnet(solve(D.sigma) %*% X.zero,
+                           solve(D.sigma) %*% Y,
                            family="gaussian",
                            standardize=standardize,
                            intercept=intercept)
