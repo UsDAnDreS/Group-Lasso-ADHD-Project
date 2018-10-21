@@ -1,6 +1,6 @@
 # Group-Lasso-ADHD-Project
 
-ALL THE FILES CAN BE FOUND ON PUBLIC ACCESS REPOSITORY:
+All the files can be found on public access repository:
 
 https://github.com/UsDAnDreS/Group-Lasso-ADHD-Project
 
