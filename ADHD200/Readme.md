@@ -1,0 +1,1 @@
+Files containing pre-processed brain fMRI time series data (averaged over brain regions according to Multi-Subject Dictionary Learning atlas, MSDL) for ADHD and control patients from ADHD-200 Global Competition (in particular borrowed from Python 'nilearn' package).
