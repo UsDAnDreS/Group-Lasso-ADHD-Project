@@ -6,11 +6,26 @@ rm(list=ls())
 ### Needed libraries ###
 ########################
 
-library(glmnet)
-library(matrixcalc)
-library(grpreg)
-library(boot)
-library(methods)
+if (!require("glmnet")) {  # Get glmnet package
+  install.packages("glmnet")
+  library(glmnet)
+}
+if (!require("matrixcalc")) {  # Get matrixcalc package
+  install.packages("matrixcalc")
+  library(matrixcalc)
+}
+if (!require("grpreg")) {  # Get grpreg package
+  install.packages("grpreg")
+  library(grpreg)
+}
+if (!require("boot")) {  # Get boot package
+  install.packages("boot")
+  library(boot)
+}
+if (!require("methods")) {  # Get methods package
+  install.packages("methods")
+  library(methods)
+}
 
 ##########################################
 ## Creates block-diagonal matrix       ###
