@@ -49,4 +49,4 @@ Executive file to obtain graphs and phenotypic summaries corresponding to estima
 ####################
 
 Files containing pre-processed brain fMRI time series data (averaged over brain regions according to Multi-Subject Dictionary Learning atlas, MSDL) for ADHD and control patients from ADHD-200 Global Competition (in particular borrowed from Python 'nilearn' package). Additionally it has a folder with a set of ".rds" files
-containing the final estimates of joint estimates for this ADHD data, which can be used to output plots via 'Group.Lasso.Paper.ADHD.Output.Plots.R' source code.
+containing the final estimates of joint estimates for this ADHD data, which can be used to output plots via 'MARCH_2019_SUBMISSION_Section_4_ADHD_Output.R' source code.
